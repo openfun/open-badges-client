@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --mount type=bind,src="${PWD}",dst=/app \
+  fundocker/obc:latest \
+  pytest \
+  "$@"
