@@ -10,14 +10,7 @@ from urllib.parse import urljoin
 
 # pylint: disable=no-name-in-module
 import requests
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    HttpUrl,
-    NoneStr,
-    ValidationError,
-    root_validator,
-)
+from pydantic import BaseModel, EmailStr, HttpUrl, ValidationError, model_validator
 from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 from ..exceptions import AuthenticationError, BadgeProviderError
@@ -180,33 +173,33 @@ class OBFAPIClient(requests.Session):
 class Badge(BaseModel):
     """Open Badge Factory Badge Model."""
 
-    id: NoneStr = None
+    id: Optional[str] = None
     name: str
     description: str
     draft: bool = False
-    image: NoneStr = None
-    css: NoneStr = None
-    criteria_html: NoneStr = None
-    email_subject: NoneStr = None
-    email_body: NoneStr = None
-    email_link_text: NoneStr = None
-    email_footer: NoneStr = None
+    image: Optional[str] = None
+    css: Optional[str] = None
+    criteria_html: Optional[str] = None
+    email_subject: Optional[str] = None
+    email_body: Optional[str] = None
+    email_link_text: Optional[str] = None
+    email_footer: Optional[str] = None
     expires: Optional[int] = None
     tags: Optional[list[str]] = None
     metadata: Optional[dict] = None
     is_created: bool = False
 
     # pylint: disable=no-self-argument,no-self-use
-    @root_validator
-    def check_id(cls, values):
+    @model_validator(mode="after")
+    def check_id(self) -> "Badge":
         """Created badges (fetched from the API) should have an identifier."""
-        id_ = values.get("id")
-        is_created = values.get("is_created")
+        id_ = self.id
+        is_created = self.is_created
 
         if is_created and id_ is None:
             raise ValidationError("Created badges should have an `id` field.")
 
-        return values
+        return self
 
 
 class BadgeQuery(BaseModel):
@@ -215,13 +208,13 @@ class BadgeQuery(BaseModel):
     draft: Optional[Literal[0, 1]] = None
     category: Optional[list[str]] = None
     id: Optional[list[str]] = None
-    query: NoneStr = None
+    query: Optional[str] = None
     meta: Optional[dict] = None
     external: Optional[Literal[0, 1]] = None
 
     def params(self):
         """Convert model to OBF badge query parameters."""
-        query = self.dict()
+        query = self.model_dump()
         if query.get("category", None) is not None:
             query["category"] = "|".join(query.get("category"))
         if query.get("id", None) is not None:
@@ -237,11 +230,11 @@ class BadgeQuery(BaseModel):
 class IssueBadgeOverride(BaseModel):
     """Open Badge Factory issue badge override model."""
 
-    name: NoneStr = None
-    description: NoneStr = None
+    name: Optional[str] = None
+    description: Optional[str] = None
     tags: Optional[list[str]] = None
-    criteria: NoneStr = None
-    criteria_add: NoneStr = None
+    criteria: Optional[str] = None
+    criteria_add: Optional[str] = None
 
 
 class BadgeIssue(BaseModel):
@@ -250,13 +243,13 @@ class BadgeIssue(BaseModel):
     recipient: list[EmailStr]
     expires: Optional[int] = None
     issued_on: Optional[int] = None
-    email_subject: NoneStr = None
-    email_body: NoneStr = None
-    email_link_text: NoneStr = None
-    email_footer: NoneStr = None
+    email_subject: Optional[str] = None
+    email_body: Optional[str] = None
+    email_link_text: Optional[str] = None
+    email_footer: Optional[str] = None
     badge_override: Optional[IssueBadgeOverride] = None
     log_entry: Optional[dict] = None
-    api_consumer_id: NoneStr = None
+    api_consumer_id: Optional[str] = None
     send_email: Literal[0, 1] = 1
 
 
@@ -293,7 +286,7 @@ class OBF(BaseProvider):
     def create(self, badge: Badge) -> Badge:
         """Create a badge."""
         response = self.api_client.post(
-            f"/badge/{self.api_client.client_id}", json=badge.dict()
+            f"/badge/{self.api_client.client_id}", json=badge.model_dump()
         )
         if (
             not response.status_code
@@ -312,7 +305,7 @@ class OBF(BaseProvider):
         fetched.is_created = True
         logger.info("Successfully created badge '%s' with ID: %s", badge.name, badge.id)
 
-        return Badge(**fetched.dict())
+        return Badge(**fetched.model_dump())
 
     def read(
         self, badge: Badge | None = None, query: BadgeQuery | None = None
@@ -362,7 +355,7 @@ class OBF(BaseProvider):
             )
 
         response = self.api_client.put(
-            f"/badge/{self.api_client.client_id}/{badge.id}", json=badge.dict()
+            f"/badge/{self.api_client.client_id}/{badge.id}", json=badge.model_dump()
         )
         if (
             not response.status_code
@@ -427,7 +420,7 @@ class OBF(BaseProvider):
             )
 
         response = self.api_client.post(
-            f"/badge/{self.api_client.client_id}/{badge.id}", json=issue.dict()
+            f"/badge/{self.api_client.client_id}/{badge.id}", json=issue.model_dump()
         )
         if (
             not response.status_code

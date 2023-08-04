@@ -218,29 +218,29 @@ def test_iter_json():
     """Test the OBF provider iter_json method."""
 
     response = requests.Response()
-    response._content = b'{"id": 1}'
-    assert list(OBFAPIClient.iter_json(response)) == [{"id": 1}]
+    response._content = b'{"id": "1"}'
+    assert list(OBFAPIClient.iter_json(response)) == [{"id": "1"}]
 
     response = requests.Response()
-    response._content = b'[{"id": 1},{"id": 2}]'
-    assert list(OBFAPIClient.iter_json(response)) == [{"id": 1}, {"id": 2}]
+    response._content = b'[{"id": "1"},{"id": "2"}]'
+    assert list(OBFAPIClient.iter_json(response)) == [{"id": "1"}, {"id": "2"}]
 
     response = requests.Response()
-    response._content = b'[\n{"id": 1},\n{"id": 2}\n]'
-    assert list(OBFAPIClient.iter_json(response)) == [{"id": 1}, {"id": 2}]
+    response._content = b'[\n{"id": "1"},\n{"id": "2"}\n]'
+    assert list(OBFAPIClient.iter_json(response)) == [{"id": "1"}, {"id": "2"}]
 
     response = requests.Response()
     response._content = b"[]"
     assert not list(OBFAPIClient.iter_json(response))
 
     response = requests.Response()
-    response._content = b'{"id": 1}\n{"id": 2}\n{"id": 3}\n'
+    response._content = b'{"id": "1"}\n{"id": "2"}\n{"id": "3"}\n'
     with pytest.raises(requests.JSONDecodeError):
         response.json()
     assert list(OBFAPIClient.iter_json(response)) == [
-        {"id": 1},
-        {"id": 2},
-        {"id": 3},
+        {"id": "1"},
+        {"id": "2"},
+        {"id": "3"},
     ]
 
 
@@ -331,9 +331,9 @@ def test_provider_read_all(mocked_responses):
         responses.GET,
         "https://openbadgefactory.com/v1/badge/real_client",
         json=[
-            {"id": 1, "name": "foo", "description": "lorem ipsum"},
-            {"id": 2, "name": "bar", "description": "lorem ipsum"},
-            {"id": 3, "name": "lol", "description": "lorem ipsum"},
+            {"id": "1", "name": "foo", "description": "lorem ipsum"},
+            {"id": "2", "name": "bar", "description": "lorem ipsum"},
+            {"id": "3", "name": "lol", "description": "lorem ipsum"},
         ],
         status=200,
     )
@@ -368,7 +368,7 @@ def test_provider_read_one(mocked_responses):
         "https://openbadgefactory.com/v1/badge/real_client/1",
         json=[
             {
-                "id": 1,
+                "id": "1",
                 "name": "foo",
                 "description": "lorem ipsum",
                 "metadata": {"life": 42},
@@ -376,7 +376,7 @@ def test_provider_read_one(mocked_responses):
         ],
         status=200,
     )
-    target_badge = Badge(id=1, name="foo", description="lorem ipsum")
+    target_badge = Badge(id="1", name="foo", description="lorem ipsum")
     badge = next(obf.read(badge=target_badge))
     assert badge.id == "1"
     assert "life" in badge.metadata
@@ -415,9 +415,9 @@ def test_provider_read_selected(mocked_responses):
         responses.GET,
         "https://openbadgefactory.com/v1/badge/real_client",
         json=[
-            {"id": 1, "name": "foo", "description": "lorem ipsum"},
-            {"id": 2, "name": "bar", "description": "lorem ipsum"},
-            {"id": 3, "name": "lol", "description": "lorem ipsum"},
+            {"id": "1", "name": "foo", "description": "lorem ipsum"},
+            {"id": "2", "name": "bar", "description": "lorem ipsum"},
+            {"id": "3", "name": "lol", "description": "lorem ipsum"},
         ],
         status=200,
     )
@@ -438,7 +438,7 @@ def test_provider_create(mocked_responses):
     obf = OBF(client_id="real_client", client_secret="super_duper")
 
     submitted = Badge(name="foo", description="lorem ipsum")
-    mocked = submitted.copy()
+    mocked = submitted.model_copy()
     mocked.id = "abcd1234"
     del mocked.is_created
     mocked_responses.add(
@@ -450,7 +450,7 @@ def test_provider_create(mocked_responses):
     mocked_responses.add(
         responses.GET,
         "https://openbadgefactory.com/v1/badge/real_client/abcd1234",
-        json=mocked.dict(),
+        json=mocked.model_dump(),
         status=200,
     )
     created = obf.create(badge=submitted)
