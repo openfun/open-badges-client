@@ -8,11 +8,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Migrate to pydantic v2
+
 ## [0.1.0] - 2023-02-03
 
 ### Added
 
-- Extracted the OBF badge provider from the Joanie project
+- Extract the OBF badge provider from the Joanie project
 
 [Unreleased]: https://github.com/openfun/open-badges-client/compare/v0.1.0...main
 [0.1.0] https://github.com/openfun/ralph/compare/a253313...v0.1.0
