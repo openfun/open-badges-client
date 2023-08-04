@@ -311,6 +311,7 @@ good-names=i,
            cm,
            ex,
            Run,
+           id,
            _
 
 # Include a hint for the correct naming format with invalid-name
@@ -449,4 +450,4 @@ min-public-methods=0
 
 # Exceptions that will emit a warning when being caught. Defaults to
 # "Exception"
-overgeneral-exceptions=Exception
+overgeneral-exceptions=builtins.Exception

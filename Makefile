@@ -6,12 +6,16 @@ SHELL := /bin/bash
 DOCKER_UID           = $(shell id -u)
 DOCKER_GID           = $(shell id -g)
 DOCKER_USER          = $(DOCKER_UID):$(DOCKER_GID)
-DOCKER_IMAGE_NAME    = fundocker/obc
-DOCKER_IMAGE_TAG     = latest
-DOCKER_IMAGE         = $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)
-DOCKER               = docker
-DOCKER_RUN           = $(DOCKER) run --rm --user $(DOCKER_USER) --mount type=bind,src="$(PWD)",dst=/app
-DOCKER_RUN_OBC       = $(DOCKER_RUN) $(DOCKER_IMAGE)
+COMPOSE              = DOCKER_USER=$(DOCKER_USER) docker compose
+COMPOSE_RUN          = $(COMPOSE) run --rm
+COMPOSE_TEST_RUN     = $(COMPOSE_RUN)
+COMPOSE_TEST_RUN_APP = $(COMPOSE_TEST_RUN) app
+
+
+# -- OBC
+OBC_IMAGE_NAME         ?= obc
+OBC_IMAGE_TAG          ?= development
+
 
 # ==============================================================================
 # RULES
@@ -25,11 +29,14 @@ bootstrap: \
 .PHONY: bootstrap
 
 build: ## build the app container
-	$(DOCKER) build -t $(DOCKER_IMAGE) .
+build:
+	OBC_IMAGE_NAME=$(OBC_IMAGE_NAME) \
+	OBC_IMAGE_TAG=$(OBC_IMAGE_TAG) \
+	  $(COMPOSE) build app
 .PHONY: build
 
 dev: ## perform editable install from mounted project sources
-	$(DOCKER_RUN_OBC) pip install -e ".[dev]"
+	DOCKER_USER=0 docker compose run --rm app pip install -e ".[dev]"
 .PHONY: dev
 
 # Nota bene: Black should come after isort just in case they don't agree...
@@ -45,32 +52,32 @@ lint: \
 
 lint-black: ## lint back-end python sources with black
 	@echo 'lint:black started…'
-	@$(DOCKER_RUN_OBC) black src/obc tests
+	@$(COMPOSE_TEST_RUN_APP) black src/obc tests
 .PHONY: lint-black
 
 lint-flake8: ## lint back-end python sources with flake8
 	@echo 'lint:flake8 started…'
-	@$(DOCKER_RUN_OBC) flake8
+	@$(COMPOSE_TEST_RUN_APP) flake8
 .PHONY: lint-flake8
 
 lint-isort: ## automatically re-arrange python imports in back-end code base
 	@echo 'lint:isort started…'
-	@$(DOCKER_RUN_OBC) isort --atomic .
+	@$(COMPOSE_TEST_RUN_APP) isort --atomic .
 .PHONY: lint-isort
 
 lint-pylint: ## lint back-end python sources with pylint
 	@echo 'lint:pylint started…'
-	@$(DOCKER_RUN) -e PYLINTHOME=/app/.pylint.d $(DOCKER_IMAGE) pylint src/obc tests
+	@$(COMPOSE_TEST_RUN_APP) pylint src/obc tests
 .PHONY: lint-pylint
 
 lint-bandit: ## lint back-end python sources with bandit
 	@echo 'lint:bandit started…'
-	@$(DOCKER_RUN_OBC) bandit -qr src/obc
+	@$(COMPOSE_TEST_RUN_APP) bandit -qr src/obc
 .PHONY: lint-bandit
 
 lint-pydocstyle: ## lint Python docstrings with pydocstyle
 	@echo 'lint:pydocstyle started…'
-	@$(DOCKER_RUN_OBC) pydocstyle
+	@$(COMPOSE_TEST_RUN_APP) pydocstyle
 .PHONY: lint-pydocstyle
 
 test: ## run back-end tests
