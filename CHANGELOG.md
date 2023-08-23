@@ -8,6 +8,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2023-08-23
+
 ### Changed
 
 - Remove deserialization of empty JSON lines
@@ -24,6 +26,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Extract the OBF badge provider from the Joanie project
 
-[Unreleased]: https://github.com/openfun/open-badges-client/compare/v0.2.0...main
-[0.2.0] https://github.com/openfun/open-badges-client/compare/v0.1.0...v0.2.0
-[0.1.0] https://github.com/openfun/open-badges-client/compare/a253313...v0.1.0
+[Unreleased]: https://github.com/openfun/open-badges-client/compare/v0.2.1...main
+[0.2.1]: https://github.com/openfun/open-badges-client/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/openfun/open-badges-client/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/openfun/open-badges-client/compare/a253313...v0.1.0
