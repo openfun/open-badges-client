@@ -243,6 +243,10 @@ def test_iter_json():
         {"id": "3"},
     ]
 
+    response = requests.Response()
+    response._content = b'{"id": "1"}\n\n{"id": "3"}\n'
+    assert list(OBFAPIClient.iter_json(response)) == [{"id": "1"}, {"id": "3"}]
+
 
 def test_badge_query_params():
     """Test the BadgeQuery model params method."""

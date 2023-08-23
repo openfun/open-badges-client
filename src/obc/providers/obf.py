@@ -130,7 +130,7 @@ class OBFAPIClient(requests.Session):
         When multiple objects are returned by the API, they are streamed as
         JSON lines instead of a JSON list, leading the response.json() method
         to fail as it is expected a valid JSON list instead. We mitigate this
-        issue by forcing JSON serialization of each item in the response.
+        issue by forcing JSON serialization of each non-empty item in the response.
         """
         try:
             json_response = response.json()
@@ -140,6 +140,8 @@ class OBFAPIClient(requests.Session):
                 yield json_response
         except requests.JSONDecodeError:
             for line in response.iter_lines():
+                if not line:
+                    continue
                 yield json.loads(line)
 
     # pylint: disable=arguments-differ
