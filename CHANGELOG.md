@@ -8,6 +8,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Return a `BadgeIssue` instance in the `issue` method [BC]
+- Add a `badges` attribute to OBF provider for badges methods [BC]
+- Add `events` and `assertions` attributes to OBF provider
+- Add `read` method for `events` and `assertions` attributes of OBF provider 
+
 ## [0.2.1] - 2023-08-23
 
 ### Changed
