@@ -4,17 +4,26 @@ import json
 import logging
 import re
 from collections.abc import Iterable
+from datetime import datetime
 from functools import cache
 from typing import Literal, Optional
 from urllib.parse import urljoin
 
 # pylint: disable=no-name-in-module
 import requests
-from pydantic import BaseModel, EmailStr, HttpUrl, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    HttpUrl,
+    ValidationError,
+    field_serializer,
+    model_validator,
+)
 from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 from ..exceptions import AuthenticationError, BadgeProviderError
-from .base import BaseProvider
+from .base import BaseAssertion, BaseBadge, BaseProvider
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +200,6 @@ class Badge(BaseModel):
     metadata: Optional[dict] = None
     is_created: bool = False
 
-    # pylint: disable=no-self-argument,no-self-use
     @model_validator(mode="after")
     def check_id(self) -> "Badge":
         """Created badges (fetched from the API) should have an identifier."""
@@ -199,7 +207,7 @@ class Badge(BaseModel):
         is_created = self.is_created
 
         if is_created and id_ is None:
-            raise ValidationError("Created badges should have an `id` field.")
+            raise AssertionError("Created badges should have an `id` field.")
 
         return self
 
@@ -242,7 +250,8 @@ class IssueBadgeOverride(BaseModel):
 class BadgeIssue(BaseModel):
     """Open Badge Factory badge issue Model."""
 
-    recipient: list[EmailStr]
+    id: Optional[str] = None
+    recipient: list[EmailStr | str]
     expires: Optional[int] = None
     issued_on: Optional[int] = None
     email_subject: Optional[str] = None
@@ -251,8 +260,84 @@ class BadgeIssue(BaseModel):
     email_footer: Optional[str] = None
     badge_override: Optional[IssueBadgeOverride] = None
     log_entry: Optional[dict] = None
-    api_consumer_id: Optional[str] = None
     send_email: Literal[0, 1] = 1
+    badge_id: Optional[str] = None
+    revoked: Optional[dict] = None
+    is_created: bool = False
+
+    @model_validator(mode="after")
+    def check_ids(self) -> "BadgeIssue":
+        """Badge issues (fetched from the API) should have an id and badge_id."""
+        id_ = self.id
+        badge_id_ = self.badge_id
+        is_created = self.is_created
+
+        if is_created and (id_ is None or badge_id_ is None):
+            raise AssertionError(
+                "Badge issues should have both an `id` and `badge_id` field."
+            )
+
+        return self
+
+
+class IssueQuery(BaseModel):
+    """Open Badge Factory issue event query filters."""
+
+    api_consumer_id: Optional[str] = None
+    badge_id: Optional[str] = None
+    recipient: Optional[list[EmailStr | str]] = None
+    begin: Optional[datetime] = None
+    end: Optional[datetime] = None
+    order_by: Literal["asc", "desc"] = None
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+    count_only: Optional[Literal[0, 1]] = None
+
+    @field_serializer("begin")
+    def serialize_begin(
+        self, begin: datetime | None, _info
+    ):  # pylint:disable =no-self-use
+        """Convert begin attribute to timestamp."""
+        return begin.timestamp() if begin else None
+
+    @field_serializer("end")
+    def serialize_end(self, end: datetime, _info):  # pylint:disable =no-self-use
+        """Convert begin attribute to timestamp."""
+        return end.timestamp() if end else None
+
+    def params(self):
+        """Convert model to OBF badge query parameters."""
+        query = self.model_dump()
+
+        if query.get("recipient", None) is not None:
+            query["recipient"] = "|".join(query.get("recipient"))
+        return self.model_dump()
+
+
+class BadgeAssertion(BaseModel):
+    """Open Badge Factory badge assertion Model."""
+
+    id: Optional[str] = None
+    event_id: Optional[str] = None
+    image: Optional[HttpUrl] = None
+    url: Optional[HttpUrl] = Field(alias="json", default=None)
+    pdf: Optional[dict] = None
+    recipient: Optional[EmailStr | str] = None
+    status: Optional[str] = None
+
+
+class AssertionQuery(BaseModel):
+    """Open Badge Factory assertion query filters."""
+
+    email: Optional[list[str]] = None
+
+    def params(self):
+        """Convert model to OBF assertion query parameters."""
+        query = self.model_dump()
+        if query.get("email", None) is not None:
+            query["email"] = "|".join(query.get("email"))
+
+        return query
 
 
 class BadgeRevokation(BaseModel):
@@ -266,24 +351,103 @@ class BadgeRevokation(BaseModel):
         return {"email": "|".join(self.recipient)}
 
 
-class OBF(BaseProvider):
-    """Open Badge Factory provider.
+class OBFAssertion(BaseAssertion):
+    """Open Badge Factory assertion."""
 
-    API documentation:
-    https://openbadgefactory.com/static/doc/obf-api-v1.pdf
-    """
+    def __init__(self, api_client: OBFAPIClient):
+        """Initialize with the API client."""
+        self.api_client = api_client
 
-    code: str = "OBF"
-    name: str = "Open Badge Factory"
+    def read(
+        self,
+        assertion: BadgeAssertion,
+        query: AssertionQuery | None = None,
+    ) -> Iterable[BadgeAssertion]:
+        """Fetch selected or all assertions from an issuing event.
 
-    def __init__(
-        self, client_id: str, client_secret: str, raise_for_status: bool = False
-    ):
-        """Initialize the API client."""
-        super().__init__()
-        self.api_client = OBFAPIClient(
-            client_id, client_secret, raise_for_status=raise_for_status
+        Args:
+            assertion: the assertion to get (using the event_id)
+            query: select assertions and yield them
+
+        If no `query` argument is provided, it yields all assertions from issue.
+        """
+        if assertion.event_id is None:
+            raise BadgeProviderError(
+                "We expect an existing issue (the event_id field is required)"
+            )
+
+        # Get a selected assertion or assertion list
+        params = None
+        if query is not None:
+            params = query.params()
+        response = self.api_client.get(
+            f"/event/{self.api_client.client_id}/{assertion.event_id}/assertion",
+            params=params,
         )
+        logger.info("Successfully listed assertions with query %s", query)
+
+        for item in self.api_client.iter_json(response):
+            try:
+                yield BadgeAssertion(**item, event_id=assertion.event_id)
+            except ValidationError as err:
+                logger.warning(
+                    "Cannot yield BadgeAssertion for event_id %s: %s",
+                    assertion.event_id,
+                    err,
+                )
+                continue
+
+
+class OBFEvent:
+    """Open Badge Factory event."""
+
+    def __init__(self, api_client: OBFAPIClient):
+        """Initialize with the API client."""
+        self.api_client = api_client
+
+    def read(
+        self, issue: BadgeIssue | None = None, query: IssueQuery | None = None
+    ) -> BadgeIssue:
+        """Fetch one, selected or all issuing events.
+
+        Args:
+            issue: if provided will only yield selected issue (using the issue id)
+            query: select events and yield them
+
+        If no `issue` or `query` argument is provided, it yields all issues.
+        """
+        # Get a single badge or issue event
+        issue_url = f"/event/{self.api_client.client_id}"
+        params = None
+        if issue is not None:
+            if issue.id is None:
+                raise BadgeProviderError(
+                    "We expect an existing instance (the ID field is required)"
+                )
+            issue_url += f"/{issue.id}"
+        # Get a selected badge or issue event list
+        if query is not None:
+            params = query.params()
+
+        response = self.api_client.get(issue_url, params=params)
+        logger.info("Successfully listed events for issue %s params %s", issue, params)
+
+        for item in self.api_client.iter_json(response):
+            try:
+                yield BadgeIssue(**item, is_created=True)
+            except ValidationError as err:
+                logger.warning(
+                    "Cannot yield BadgeIssue with id %s: %s", item["id"], err
+                )
+                continue
+
+
+class OBFBadge(BaseBadge):
+    """Open Badge Factory badge."""
+
+    def __init__(self, api_client: OBFAPIClient):
+        """Initialize the API client."""
+        self.api_client = api_client
 
     def create(self, badge: Badge) -> Badge:
         """Create a badge."""
@@ -312,7 +476,7 @@ class OBF(BaseProvider):
     def read(
         self, badge: Badge | None = None, query: BadgeQuery | None = None
     ) -> Iterable[Badge]:
-        """Fetch one, selected or all badges.
+        """Read one, selected or all badges.
 
         Args:
             badge: if provided will only yield selected badge (using the badge id)
@@ -347,7 +511,11 @@ class OBF(BaseProvider):
             logger.info("Successfully listed badges")
 
         for item in self.api_client.iter_json(response):
-            yield Badge(**item, is_created=True)
+            try:
+                yield Badge(**item, is_created=True)
+            except ValidationError as err:
+                logger.warning("Cannot yield Badge with id %s: %s", item["id"], err)
+                continue
 
     def update(self, badge: Badge) -> Badge:
         """Update a badge."""
@@ -407,8 +575,8 @@ class OBF(BaseProvider):
             raise BadgeProviderError(f"Cannot delete badge with ID: {badge.id}")
         logger.critical("Deleted badge '%s' with ID: %s", badge.name, badge.id)
 
-    def issue(self, badge: Badge, issue: BadgeIssue) -> tuple[HttpUrl, str]:
-        """Issue a badge and return issuing event URL and ID.
+    def issue(self, badge: Badge, issue: BadgeIssue) -> BadgeIssue:
+        """Issue a badge.
 
         Note that you cannot issue a badge with a draft status.
         """
@@ -431,17 +599,22 @@ class OBF(BaseProvider):
             raise BadgeProviderError(f"Cannot issue badge with ID: {badge.id}")
 
         event_url = response.headers.get("Location")
+        issue.id = re.match(
+            f"/v1/event/{self.api_client.client_id}/(.*)", event_url  # type: ignore
+        ).groups()[0]
+
+        # Get issued badge event
+        response = self.api_client.get(f"/event/{self.api_client.client_id}/{issue.id}")
+        fetched = BadgeIssue(**response.json())
+        fetched.is_created = True
         logger.info(
             "Successfully issued %d badges for badge ID: %s",
             len(issue.recipient),
             badge.id,
         )
-        logger.info("Issued badges event URL: %s", event_url)
-        event_id = re.match(
-            f"/v1/event/{self.api_client.client_id}/(.*)", event_url  # type: ignore
-        ).groups()[0]
 
-        return event_url, event_id  # type: ignore
+        # Return BadgeIssue with added fields
+        return badge.model_copy(update=fetched.model_dump())
 
     def revoke(self, revokation: BadgeRevokation) -> None:
         """Revoke one or more issued badges."""
@@ -456,3 +629,26 @@ class OBF(BaseProvider):
         ):
             raise BadgeProviderError(f"Cannot revoke event: {revokation}")
         logger.info("Revoked event: %s", revokation)
+
+
+class OBF(BaseProvider):
+    """Open Badge Factory provider.
+
+    API documentation:
+    https://openbadgefactory.com/static/doc/obf-api-v1.pdf
+    """
+
+    code: str = "OBF"
+    name: str = "Open Badge Factory"
+
+    def __init__(
+        self, client_id: str, client_secret: str, raise_for_status: bool = False
+    ):
+        """Initialize the API client and the badge and assertion classes."""
+        super().__init__()
+        self.api_client = OBFAPIClient(
+            client_id, client_secret, raise_for_status=raise_for_status
+        )
+        self.badges = OBFBadge(self.api_client)
+        self.assertions = OBFAssertion(self.api_client)
+        self.events = OBFEvent(self.api_client)
