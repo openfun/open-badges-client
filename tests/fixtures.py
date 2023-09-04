@@ -1,15 +1,19 @@
 """Pytest fixtures."""
 
 import pytest
-import responses
 
 from obc.providers.obf import OBFAPIClient
 
 
 @pytest.fixture
-def mocked_responses():
+def anyio_backend():
+    """Select asyncio backend for pytest anyio."""
+    return "asyncio"
+
+
+@pytest.fixture
+def mocked_responses(httpx_mock):
     """Use the responses module to mock Open Badge provider API responses."""
-    with responses.RequestsMock(assert_all_requests_are_fired=True) as rsps:
-        yield rsps
+    yield httpx_mock
     # pylint: disable=protected-access
     OBFAPIClient._access_token.cache_clear()

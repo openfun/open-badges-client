@@ -10,8 +10,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Change providers methods to be asynchronous [BC]
 - Return a `BadgeIssue` instance in the `issue` method [BC]
 - Add a `badges` attribute to OBF provider for badges methods [BC]
+- Change from `requests` to `httpx` for API requests
 - Add `events` and `assertions` attributes to OBF provider
 - Add `read` method for `events` and `assertions` attributes of OBF provider 
 

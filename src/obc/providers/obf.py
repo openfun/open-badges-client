@@ -6,11 +6,11 @@ import re
 from collections.abc import Iterable
 from datetime import datetime
 from functools import cache
+from json import JSONDecodeError
 from typing import Literal, Optional
 from urllib.parse import urljoin
 
-# pylint: disable=no-name-in-module
-import requests
+import httpx
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -20,7 +20,6 @@ from pydantic import (
     field_serializer,
     model_validator,
 )
-from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 from ..exceptions import AuthenticationError, BadgeProviderError
 from .base import BaseAssertion, BaseBadge, BaseProvider
@@ -28,26 +27,23 @@ from .base import BaseAssertion, BaseBadge, BaseProvider
 logger = logging.getLogger(__name__)
 
 
-class OAuth2AccessToken(requests.auth.AuthBase):
+class OAuth2AccessToken(httpx.Auth):
     """Add OAuth2 access token to HTTP API requests header."""
 
     def __init__(self, access_token):
         """Instantiate requests Auth object with generated access_token."""
         self.access_token = access_token
 
-    def __call__(self, request):
+    def auth_flow(self, request):
         """Modify and return the request."""
-        request.headers.update(
-            {
-                "Authorization": f"Bearer {self.access_token}",
-            }
-        )
-
-        return request
+        request.headers["Authorization"] = f"Bearer {self.access_token}"
+        yield request
 
 
-class OBFAPIClient(requests.Session):
+class OBFAPIClient(httpx.AsyncClient):
     """Open Badge Factory API Client."""
+
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(
         self,
@@ -57,20 +53,17 @@ class OBFAPIClient(requests.Session):
         raise_for_status: bool = False,
         **kwargs,
     ):
-        """Override default requests.Session instantiation to handle authentication."""
+        """Override default httpx.AsyncClient instantiation to handle authentication."""
         super().__init__(*args, **kwargs)
 
         self.api_root_url: str = "https://openbadgefactory.com"
         self.api_version_prefix: str = "v1"
         self.client_id: str = client_id
         self.client_secret: str = client_secret
-        self.raise_for_status: bool = raise_for_status
+        self.event_hooks = {"response": [self.raise_status]} if raise_for_status else {}
+        self.headers = {"Content-Type": "application/json"}
+        self.base_url = f"{self.api_root_url}/{self.api_version_prefix}"
         self.auth = self._get_auth
-        self.headers.update(
-            {
-                "Content-Type": "application/json",
-            }
-        )
 
     @staticmethod
     @cache
@@ -86,7 +79,7 @@ class OBFAPIClient(requests.Session):
 
         """
         url = f"{api_version_prefix}/client/oauth2/token"
-        response = requests.post(
+        response = httpx.post(
             urljoin(api_root_url, url),
             json={
                 "grant_type": "client_credentials",
@@ -97,7 +90,7 @@ class OBFAPIClient(requests.Session):
         )
         try:
             json_response = response.json()
-        except RequestsJSONDecodeError as exc:
+        except JSONDecodeError as exc:
             raise AuthenticationError(
                 "Invalid response from the OBF server with provided credentials"
             ) from exc
@@ -124,16 +117,16 @@ class OBFAPIClient(requests.Session):
             )
         )
 
-    def check_auth(self):
+    async def check_auth(self):
         """Check OBF API credentials using the dedicated endpoint."""
         url = f"/ping/{self.client_id}"
-        response = self.get(url)
-        if response.status_code != requests.codes.ok:  # pylint: disable=no-member
+        response = await self.get(url)
+        if response.status_code != httpx.codes.OK:
             raise AuthenticationError("Invalid access token for OBF")
         return response
 
     @classmethod
-    def iter_json(cls, response: requests.Response) -> Iterable:
+    def iter_json(cls, response: httpx.Response) -> Iterable:
         """Iterate over JSON lines serialization in API responses.
 
         When multiple objects are returned by the API, they are streamed as
@@ -147,36 +140,34 @@ class OBFAPIClient(requests.Session):
                 yield from json_response
             else:
                 yield json_response
-        except requests.JSONDecodeError:
+        except JSONDecodeError:
             for line in response.iter_lines():
                 if not line:
                     continue
                 yield json.loads(line)
 
+    @staticmethod
+    async def raise_status(response):
+        """Event hook to raise for status if chosen."""
+        await response.raise_for_status()
+
     # pylint: disable=arguments-differ
-    def request(self, method, url, **kwargs):
+    async def request(self, method, url, **kwargs):
         """Make OBF API usage more developer-friendly.
 
         - Automatically add the API root URL so that we can focus on the endpoints
         - Automatically renew access token when expired
         """
         url = urljoin(self.api_root_url, f"{self.api_version_prefix}/{url}")
-        response = super().request(method, url, **kwargs)
+        response = await super().request(method, url, **kwargs)
 
         # Try to regenerate the access token in case of 403 response
-        if (
-            response.status_code
-            == requests.codes.forbidden  # pylint: disable=no-member
-        ):
+        if response.status_code == httpx.codes.FORBIDDEN:
             # Clear cached property and force access token update
             self._access_token.cache_clear()
             self.auth = self._get_auth
             # Give it another try
-            return super().request(method, url, **kwargs)
-
-        # Check response status and raise an exception on error
-        if self.raise_for_status:
-            response.raise_for_status()
+            return await super().request(method, url, **kwargs)
 
         return response
 
@@ -224,7 +215,7 @@ class BadgeQuery(BaseModel):
 
     def params(self):
         """Convert model to OBF badge query parameters."""
-        query = self.model_dump()
+        query = self.model_dump(exclude_unset=True)
         if query.get("category", None) is not None:
             query["category"] = "|".join(query.get("category"))
         if query.get("id", None) is not None:
@@ -298,20 +289,20 @@ class IssueQuery(BaseModel):
         self, begin: datetime | None, _info
     ):  # pylint:disable =no-self-use
         """Convert begin attribute to timestamp."""
-        return begin.timestamp() if begin else None
+        return int(begin.timestamp()) if begin else None
 
     @field_serializer("end")
     def serialize_end(self, end: datetime, _info):  # pylint:disable =no-self-use
         """Convert begin attribute to timestamp."""
-        return end.timestamp() if end else None
+        return int(end.timestamp()) if end else None
 
     def params(self):
         """Convert model to OBF badge query parameters."""
-        query = self.model_dump()
+        query = self.model_dump(exclude_unset=True)
 
         if query.get("recipient", None) is not None:
             query["recipient"] = "|".join(query.get("recipient"))
-        return self.model_dump()
+        return query
 
 
 class BadgeAssertion(BaseModel):
@@ -333,7 +324,7 @@ class AssertionQuery(BaseModel):
 
     def params(self):
         """Convert model to OBF assertion query parameters."""
-        query = self.model_dump()
+        query = self.model_dump(exclude_unset=True)
         if query.get("email", None) is not None:
             query["email"] = "|".join(query.get("email"))
 
@@ -358,7 +349,7 @@ class OBFAssertion(BaseAssertion):
         """Initialize with the API client."""
         self.api_client = api_client
 
-    def read(
+    async def read(
         self,
         assertion: BadgeAssertion,
         query: AssertionQuery | None = None,
@@ -380,7 +371,7 @@ class OBFAssertion(BaseAssertion):
         params = None
         if query is not None:
             params = query.params()
-        response = self.api_client.get(
+        response = await self.api_client.get(
             f"/event/{self.api_client.client_id}/{assertion.event_id}/assertion",
             params=params,
         )
@@ -405,7 +396,7 @@ class OBFEvent:
         """Initialize with the API client."""
         self.api_client = api_client
 
-    def read(
+    async def read(
         self, issue: BadgeIssue | None = None, query: IssueQuery | None = None
     ) -> BadgeIssue:
         """Fetch one, selected or all issuing events.
@@ -429,7 +420,7 @@ class OBFEvent:
         if query is not None:
             params = query.params()
 
-        response = self.api_client.get(issue_url, params=params)
+        response = await self.api_client.get(issue_url, params=params)
         logger.info("Successfully listed events for issue %s params %s", issue, params)
 
         for item in self.api_client.iter_json(response):
@@ -449,15 +440,12 @@ class OBFBadge(BaseBadge):
         """Initialize the API client."""
         self.api_client = api_client
 
-    def create(self, badge: Badge) -> Badge:
+    async def create(self, badge: Badge) -> Badge:
         """Create a badge."""
-        response = self.api_client.post(
+        response = await self.api_client.post(
             f"/badge/{self.api_client.client_id}", json=badge.model_dump()
         )
-        if (
-            not response.status_code
-            == requests.codes.created  # pylint: disable=no-member
-        ):
+        if not response.status_code == httpx.codes.CREATED:
             raise BadgeProviderError(f"Cannot create badge: {badge}")
 
         # Get badge ID
@@ -467,13 +455,13 @@ class OBFBadge(BaseBadge):
         ).groups()[0]
 
         # Get created badge
-        fetched = next(self.read(badge=badge))  # type: ignore
+        fetched = await anext(self.read(badge=badge))  # type: ignore
         fetched.is_created = True
         logger.info("Successfully created badge '%s' with ID: %s", badge.name, badge.id)
 
         return Badge(**fetched.model_dump())
 
-    def read(
+    async def read(
         self, badge: Badge | None = None, query: BadgeQuery | None = None
     ) -> Iterable[Badge]:
         """Read one, selected or all badges.
@@ -490,14 +478,14 @@ class OBFBadge(BaseBadge):
                 raise BadgeProviderError(
                     "We expect an existing badge instance (the ID field is required)"
                 )
-            response = self.api_client.get(
+            response = await self.api_client.get(
                 f"/badge/{self.api_client.client_id}/{badge.id}"
             )
             logger.info("Successfully get badge with ID: %s", badge.id)
 
         # Get a selected badge list
         elif query is not None:
-            response = self.api_client.get(
+            response = await self.api_client.get(
                 f"/badge/{self.api_client.client_id}",
                 params=query.params(),
             )
@@ -505,7 +493,7 @@ class OBFBadge(BaseBadge):
 
         # Get all badges list
         else:
-            response = self.api_client.get(
+            response = await self.api_client.get(
                 f"/badge/{self.api_client.client_id}",
             )
             logger.info("Successfully listed badges")
@@ -517,35 +505,31 @@ class OBFBadge(BaseBadge):
                 logger.warning("Cannot yield Badge with id %s: %s", item["id"], err)
                 continue
 
-    def update(self, badge: Badge) -> Badge:
+    async def update(self, badge: Badge) -> Badge:
         """Update a badge."""
         if badge.id is None:
             raise BadgeProviderError(
                 "We expect an existing badge instance (the ID field is required)"
             )
 
-        response = self.api_client.put(
+        response = await self.api_client.put(
             f"/badge/{self.api_client.client_id}/{badge.id}", json=badge.model_dump()
         )
-        if (
-            not response.status_code
-            == requests.codes.no_content  # pylint: disable=no-member
-        ):
+        if not response.status_code == httpx.codes.NO_CONTENT:
             raise BadgeProviderError(f"Cannot update badge with ID: {badge.id}")
         logger.info("Successfully updated badge '%s' with ID: %s", badge.name, badge.id)
 
         return badge
 
-    def delete(self, badge: Badge | None = None) -> None:
+    async def delete(self, badge: Badge | None = None) -> None:
         """Delete a badge."""
         # Delete all client badges
         if badge is None:
             logger.critical("Will delete all client badges!")
-            response = self.api_client.delete(f"/badge/{self.api_client.client_id}")
-            if (
-                not response.status_code
-                == requests.codes.no_content  # pylint: disable=no-member
-            ):
+            response = await self.api_client.delete(
+                f"/badge/{self.api_client.client_id}"
+            )
+            if not response.status_code == httpx.codes.NO_CONTENT:
                 raise BadgeProviderError(
                     (
                         "Cannot delete badges for client with ID: "
@@ -565,17 +549,14 @@ class OBFBadge(BaseBadge):
 
         # Delete a single badge
         logger.critical("Will delete badge '%s' with ID: %s", badge.name, badge.id)
-        response = self.api_client.delete(
+        response = await self.api_client.delete(
             f"/badge/{self.api_client.client_id}/{badge.id}"
         )
-        if (
-            not response.status_code
-            == requests.codes.no_content  # pylint: disable=no-member
-        ):
+        if not response.status_code == httpx.codes.NO_CONTENT:
             raise BadgeProviderError(f"Cannot delete badge with ID: {badge.id}")
         logger.critical("Deleted badge '%s' with ID: %s", badge.name, badge.id)
 
-    def issue(self, badge: Badge, issue: BadgeIssue) -> BadgeIssue:
+    async def issue(self, badge: Badge, issue: BadgeIssue) -> BadgeIssue:
         """Issue a badge.
 
         Note that you cannot issue a badge with a draft status.
@@ -589,13 +570,10 @@ class OBFBadge(BaseBadge):
                 f"You cannot issue a badge with a draft status (ID: {badge.id})"
             )
 
-        response = self.api_client.post(
+        response = await self.api_client.post(
             f"/badge/{self.api_client.client_id}/{badge.id}", json=issue.model_dump()
         )
-        if (
-            not response.status_code
-            == requests.codes.created  # pylint: disable=no-member
-        ):
+        if not response.status_code == httpx.codes.CREATED:
             raise BadgeProviderError(f"Cannot issue badge with ID: {badge.id}")
 
         event_url = response.headers.get("Location")
@@ -604,7 +582,9 @@ class OBFBadge(BaseBadge):
         ).groups()[0]
 
         # Get issued badge event
-        response = self.api_client.get(f"/event/{self.api_client.client_id}/{issue.id}")
+        response = await self.api_client.get(
+            f"/event/{self.api_client.client_id}/{issue.id}"
+        )
         fetched = BadgeIssue(**response.json())
         fetched.is_created = True
         logger.info(
@@ -616,17 +596,14 @@ class OBFBadge(BaseBadge):
         # Return BadgeIssue with added fields
         return badge.model_copy(update=fetched.model_dump())
 
-    def revoke(self, revokation: BadgeRevokation) -> None:
+    async def revoke(self, revokation: BadgeRevokation) -> None:
         """Revoke one or more issued badges."""
         logger.warning("Will revoke event: %s", revokation)
-        response = self.api_client.delete(
+        response = await self.api_client.delete(
             f"/event/{self.api_client.client_id}/{revokation.event_id}",
             params=revokation.params(),
         )
-        if (
-            not response.status_code
-            == requests.codes.no_content  # pylint: disable=no-member
-        ):
+        if not response.status_code == httpx.codes.NO_CONTENT:
             raise BadgeProviderError(f"Cannot revoke event: {revokation}")
         logger.info("Revoked event: %s", revokation)
 

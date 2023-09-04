@@ -2,4 +2,4 @@
 
 # pylint: disable=unused-import
 
-from .fixtures import mocked_responses  # noqa: F401
+from .fixtures import anyio_backend, mocked_responses  # noqa: F401
