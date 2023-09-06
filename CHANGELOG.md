@@ -8,14 +8,19 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2023-09-06
+
 ### Added
+
+- Add `events` and `assertions` attributes to OBF provider
+- Add `read` method for `events` and `assertions` attributes of OBF provider 
+
+### Changed
 
 - Change providers methods to be asynchronous [BC]
 - Return a `BadgeIssue` instance in the `issue` method [BC]
-- Add a `badges` attribute to OBF provider for badges methods [BC]
+- Move badges methods to a `badges` attribute of OBF provider [BC]
 - Change from `requests` to `httpx` for API requests
-- Add `events` and `assertions` attributes to OBF provider
-- Add `read` method for `events` and `assertions` attributes of OBF provider 
 
 ## [0.2.1] - 2023-08-23
 
@@ -35,7 +40,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Extract the OBF badge provider from the Joanie project
 
-[Unreleased]: https://github.com/openfun/open-badges-client/compare/v0.2.1...main
+[Unreleased]: https://github.com/openfun/open-badges-client/compare/v1.0.0...main
+[1.0.0]: https://github.com/openfun/open-badges-client/compare/v0.2.1...v1.0.0
 [0.2.1]: https://github.com/openfun/open-badges-client/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/openfun/open-badges-client/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/openfun/open-badges-client/compare/a253313...v0.1.0
