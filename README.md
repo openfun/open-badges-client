@@ -27,7 +27,7 @@ from obc.providers.obf import BadgeIssue, BadgeQuery, OBF
 obf = OBF(client_id="my_obf_client_id", client_secret="super_secret")
 
 # Get the badge with the "badge_id" identifier
-badge = next(obf.read(query=BadgeQuery(id="badge_id")))
+badge = await anext(obf.badges.read(query=BadgeQuery(id="badge_id")))
 
 # We want to issue a badge for the following recipients
 issue = BadgeIssue(
@@ -37,7 +37,7 @@ issue = BadgeIssue(
     ]
 )
 
-event_url, event_id = obf.issue(badge, issue)
+issue = await obf.badges.issue(badge, issue)
 ```
 
 More details will follow in the upcoming documentation.
