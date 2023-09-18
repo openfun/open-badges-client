@@ -315,6 +315,18 @@ class BadgeAssertion(BaseModel):
     pdf: Optional[dict] = None
     recipient: Optional[EmailStr | str] = None
     status: Optional[str] = None
+    is_created: bool = False
+
+    @model_validator(mode="after")
+    def check_ids(self) -> "BadgeAssertion":
+        """Badge assertions (fetched from the API) should have an id."""
+        id_ = self.id
+        is_created = self.is_created
+
+        if is_created and id_ is None:
+            raise AssertionError("Badge assertions should have an `id` field.")
+
+        return self
 
 
 class AssertionQuery(BaseModel):
@@ -379,14 +391,13 @@ class OBFAssertion(BaseAssertion):
 
         for item in self.api_client.iter_json(response):
             try:
-                yield BadgeAssertion(**item, event_id=assertion.event_id)
-            except ValidationError as err:
-                logger.warning(
-                    "Cannot yield BadgeAssertion for event_id %s: %s",
-                    assertion.event_id,
-                    err,
+                yield BadgeAssertion(
+                    **item, event_id=assertion.event_id, is_created=True
                 )
-                continue
+            except ValidationError as err:
+                msg = f"Cannot yield BadgeAssertion for event_id {assertion.event_id}"
+                logger.error("%s. %s", msg, err)
+                raise BadgeProviderError(msg) from err
 
 
 class OBFEvent:
@@ -427,10 +438,9 @@ class OBFEvent:
             try:
                 yield BadgeIssue(**item, is_created=True)
             except ValidationError as err:
-                logger.warning(
-                    "Cannot yield BadgeIssue with id %s: %s", item["id"], err
-                )
-                continue
+                msg = "Cannot yield BadgeIssue"
+                logger.error("%s. %s", msg, err)
+                raise BadgeProviderError(msg) from err
 
 
 class OBFBadge(BaseBadge):
@@ -502,8 +512,9 @@ class OBFBadge(BaseBadge):
             try:
                 yield Badge(**item, is_created=True)
             except ValidationError as err:
-                logger.warning("Cannot yield Badge with id %s: %s", item["id"], err)
-                continue
+                msg = "Cannot yield Badge"
+                logger.error("%s. %s", msg, err)
+                raise BadgeProviderError(msg) from err
 
     async def update(self, badge: Badge) -> Badge:
         """Update a badge."""

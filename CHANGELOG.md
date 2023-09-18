@@ -8,6 +8,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- OBF: raise a `BadgeProviderError` if `read` methods cannot yield objects
+
 ## [1.0.0] - 2023-09-06
 
 ### Added
