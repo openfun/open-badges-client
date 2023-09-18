@@ -552,11 +552,14 @@ async def test_provider_badge_read_with_validationerror(mocked_responses, caplog
         status_code=200,
     )
 
-    with caplog.at_level(logging.WARNING):
-        badges = [badge async for badge in obf.badges.read()]
-        assert len(badges) == 1
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(
+            BadgeProviderError,
+            match="Cannot yield Badge",
+        ):
+            badges = [badge async for badge in obf.badges.read()]
 
-    assert ("obc.providers.obf", logging.WARNING) in [
+    assert ("obc.providers.obf", logging.ERROR) in [
         (class_, level) for (class_, level, _) in caplog.record_tuples
     ]
 
@@ -1145,11 +1148,15 @@ async def test_provider_event_read_with_validationerror(mocked_responses, caplog
         ],
         status_code=200,
     )
-    with caplog.at_level(logging.WARNING):
-        events = [event async for event in obf.events.read()]
-        assert len(events) == 1
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(
+            BadgeProviderError,
+            match="Cannot yield BadgeIssue",
+        ):
+            events = [event async for event in obf.events.read()]
+            assert len(events) == 1
 
-    assert ("obc.providers.obf", logging.WARNING) in [
+    assert ("obc.providers.obf", logging.ERROR) in [
         (class_, level) for (class_, level, _) in caplog.record_tuples
     ]
 
@@ -1307,13 +1314,17 @@ async def test_provider_assertion_read_with_validationerror(mocked_responses, ca
     )
 
     assertion = BadgeAssertion(event_id="4321")
-    with caplog.at_level(logging.WARNING):
-        assertions = [
-            assertion async for assertion in obf.assertions.read(assertion=assertion)
-        ]
-        assert len(assertions) == 1
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(
+            BadgeProviderError,
+            match="Cannot yield BadgeAssertion for event_id 4321",
+        ):
+            _ = [
+                assertion
+                async for assertion in obf.assertions.read(assertion=assertion)
+            ]
 
-    assert ("obc.providers.obf", logging.WARNING) in [
+    assert ("obc.providers.obf", logging.ERROR) in [
         (class_, level) for (class_, level, _) in caplog.record_tuples
     ]
 
