@@ -19,6 +19,7 @@ from obc.providers.obf import (
     BadgeIssue,
     BadgeQuery,
     BadgeRevokation,
+    IssueBadgeOverride,
     IssueQuery,
     OAuth2AccessToken,
     OBFAPIClient,
@@ -339,6 +340,33 @@ async def test_badgeissue_check_ids():
         match="Badge issues should have both an `id` and `badge_id` field.",
     ):
         BadgeIssue(**items)
+
+
+@pytest.mark.anyio
+async def test_badgeissue_json_types():
+    """Test the BadgeIssue deserializer methods."""
+
+    items = {
+        "recipient": ["toto@bar.com"],
+        "is_created": True,
+        "id": "id1234",
+        "badge_id": "1234",
+        "badge_override": '{"name": "toto", "description": "Lorem Ipsum"}',
+    }
+
+    assert BadgeIssue(**items).badge_override == IssueBadgeOverride(
+        name="toto",
+        description="Lorem Ipsum",
+    )
+
+    items = {
+        "recipient": ["toto@bar.com"],
+        "id": "id1234",
+        "badge_id": "1234",
+        "log_entry": '{"test": "OK"}',
+    }
+
+    assert BadgeIssue(**items).log_entry == {"test": "OK"}
 
 
 @pytest.mark.anyio
