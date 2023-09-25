@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from functools import cache
 from json import JSONDecodeError
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urljoin
 
 import httpx
@@ -16,6 +16,7 @@ from pydantic import (
     EmailStr,
     Field,
     HttpUrl,
+    Json,
     ValidationError,
     field_serializer,
     model_validator,
@@ -249,8 +250,8 @@ class BadgeIssue(BaseModel):
     email_body: Optional[str] = None
     email_link_text: Optional[str] = None
     email_footer: Optional[str] = None
-    badge_override: Optional[IssueBadgeOverride] = None
-    log_entry: Optional[dict] = None
+    badge_override: Optional[IssueBadgeOverride | Json[IssueBadgeOverride]] = None
+    log_entry: Optional[dict | Json[Any]] = None
     send_email: Literal[0, 1] = 1
     badge_id: Optional[str] = None
     revoked: Optional[dict] = None
