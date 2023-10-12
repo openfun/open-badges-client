@@ -18,7 +18,7 @@ from obc.providers.obf import (
     BadgeAssertion,
     BadgeIssue,
     BadgeQuery,
-    BadgeRevokation,
+    BadgeRevocation,
     IssueBadgeOverride,
     IssueQuery,
     OAuth2AccessToken,
@@ -885,7 +885,7 @@ async def test_provider_badge_revoke(mocked_responses):
     )
     assert (
         await obf.badges.revoke(
-            BadgeRevokation(
+            BadgeRevocation(
                 event_id="foo_event",
                 recipient=["foo@example.org", "bar@example.org"],
             )
@@ -911,7 +911,7 @@ async def test_provider_badge_revoke(mocked_responses):
         ),
     ):
         await obf.badges.revoke(
-            BadgeRevokation(
+            BadgeRevocation(
                 event_id="foo_event",
                 recipient=[
                     "foo@example.org",

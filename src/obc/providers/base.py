@@ -43,7 +43,7 @@ class BaseBadge(ABC):
         """Issue a badge."""
 
     @abstractmethod
-    async def revoke(self, revokation):
+    async def revoke(self, revocation):
         """Revoke one or more badges."""
 
 

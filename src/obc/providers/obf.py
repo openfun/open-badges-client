@@ -344,8 +344,8 @@ class AssertionQuery(BaseModel):
         return query
 
 
-class BadgeRevokation(BaseModel):
-    """Open Badge Factory badge revokation model."""
+class BadgeRevocation(BaseModel):
+    """Open Badge Factory badge revocation model."""
 
     event_id: str
     recipient: list[EmailStr]
@@ -492,7 +492,7 @@ class OBFBadge(BaseBadge):
             response = await self.api_client.get(
                 f"/badge/{self.api_client.client_id}/{badge.id}"
             )
-            logger.info("Successfully get badge with ID: %s", badge.id)
+            logger.info("Successfully got badge with ID: %s", badge.id)
 
         # Get a selected badge list
         elif query is not None:
@@ -608,16 +608,16 @@ class OBFBadge(BaseBadge):
         # Return BadgeIssue with added fields
         return badge.model_copy(update=fetched.model_dump())
 
-    async def revoke(self, revokation: BadgeRevokation) -> None:
+    async def revoke(self, revocation: BadgeRevocation) -> None:
         """Revoke one or more issued badges."""
-        logger.warning("Will revoke event: %s", revokation)
+        logger.warning("Will revoke event: %s", revocation)
         response = await self.api_client.delete(
-            f"/event/{self.api_client.client_id}/{revokation.event_id}",
-            params=revokation.params(),
+            f"/event/{self.api_client.client_id}/{revocation.event_id}",
+            params=revocation.params(),
         )
         if not response.status_code == httpx.codes.NO_CONTENT:
-            raise BadgeProviderError(f"Cannot revoke event: {revokation}")
-        logger.info("Revoked event: %s", revokation)
+            raise BadgeProviderError(f"Cannot revoke event: {revocation}")
+        logger.info("Revoked event: %s", revocation)
 
 
 class OBF(BaseProvider):
