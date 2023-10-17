@@ -12,6 +12,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - OBF: raise a `BadgeProviderError` if `read` methods cannot yield objects
 - OBF: `BadgeIssue` params `badge_override` and `log_entry` now accept strings
+- OBF: `BadgeRevokation` is replaced by `BadgeRevocation`
 
 ## [1.0.0] - 2023-09-06
 
