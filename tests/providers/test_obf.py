@@ -493,18 +493,11 @@ async def test_provider_badge_read_one(mocked_responses):
         ],
         status_code=200,
     )
-    target_badge = Badge(id="1", name="foo", description="lorem ipsum")
-    badge = await anext(obf.badges.read(badge=target_badge))
+    target_badge_id = "1"
+    badge = await anext(obf.badges.read(badge_id=target_badge_id))
     assert badge.id == "1"
     assert "life" in badge.metadata
     assert badge.metadata.get("life") == 42
-
-    target_badge = Badge(name="foo", description="lorem ipsum")
-    with pytest.raises(
-        BadgeProviderError,
-        match="the ID field is required",
-    ):
-        await anext(obf.badges.read(badge=target_badge))
 
 
 @pytest.mark.anyio
@@ -692,18 +685,13 @@ async def test_provider_badge_delete_one(mocked_responses):
     )
     obf = OBF(client_id="real_client", client_secret="super_duper")
 
-    with pytest.raises(
-        BadgeProviderError, match="We expect an existing badge instance"
-    ):
-        await obf.badges.delete(Badge(name="foo", description="lorem ipsum"))
-
-    badge = Badge(id="abcd1234", name="foo", description="lorem ipsum")
+    badge_id = "abcd1234"
     mocked_responses.add_response(
         method="DELETE",
         url="https://openbadgefactory.com/v1/badge/real_client/abcd1234",
         status_code=204,
     )
-    assert await obf.badges.delete(badge) is None
+    assert await obf.badges.delete(badge_id) is None
 
     # An error occurred while deleting the badge
     mocked_responses.add_response(
@@ -714,7 +702,7 @@ async def test_provider_badge_delete_one(mocked_responses):
     with pytest.raises(
         BadgeProviderError, match="Cannot delete badge with ID: abcd1234"
     ):
-        await obf.badges.delete(badge=badge)
+        await obf.badges.delete(badge_id=badge_id)
 
 
 @pytest.mark.anyio
@@ -752,60 +740,6 @@ async def test_provider_badge_delete_all(mocked_responses):
 
 
 @pytest.mark.anyio
-async def test_provider_badge_issue_non_existing(mocked_responses):
-    """Trying to issue a badge for a non-existing instance should fail."""
-
-    mocked_responses.add_response(
-        method="POST",
-        url="https://openbadgefactory.com/v1/client/oauth2/token",
-        json={
-            "access_token": "accesstoken123",
-        },
-        status_code=200,
-    )
-    obf = OBF(client_id="real_client", client_secret="super_duper")
-
-    badge = Badge(name="test", description="lorem ipsum")
-    issue = BadgeIssue(
-        recipient=[
-            "foo@example.org",
-        ]
-    )
-    with pytest.raises(
-        BadgeProviderError,
-        match="We expect an existing badge instance",
-    ):
-        await obf.badges.issue(badge, issue)
-
-
-@pytest.mark.anyio
-async def test_provider_badge_issue_draft(mocked_responses):
-    """Trying to issue a badge for a draft instance should fail."""
-
-    mocked_responses.add_response(
-        method="POST",
-        url="https://openbadgefactory.com/v1/client/oauth2/token",
-        json={
-            "access_token": "accesstoken123",
-        },
-        status_code=200,
-    )
-    obf = OBF(client_id="real_client", client_secret="super_duper")
-
-    badge = Badge(id="abcd1234", name="test", description="lorem ipsum", draft=True)
-    issue = BadgeIssue(
-        recipient=[
-            "foo@example.org",
-        ]
-    )
-    with pytest.raises(
-        BadgeProviderError,
-        match="You cannot issue a badge with a draft status",
-    ):
-        await obf.badges.issue(badge, issue)
-
-
-@pytest.mark.anyio
 async def test_provider_badge_issue_success(mocked_responses):
     """Test the OBF issue method."""
 
@@ -819,7 +753,7 @@ async def test_provider_badge_issue_success(mocked_responses):
     )
     obf = OBF(client_id="real_client", client_secret="super_duper")
 
-    badge = Badge(id="badgeId1234", name="test", description="lorem ipsum", draft=False)
+    badge_id = "badgeId1234"
     submitted_issue = BadgeIssue(
         recipient=[
             "foo@example.org",
@@ -842,9 +776,9 @@ async def test_provider_badge_issue_success(mocked_responses):
         json=mocked.model_dump(),
         status_code=200,
     )
-    created_issue = await obf.badges.issue(badge, submitted_issue)
+    created_issue = await obf.badges.issue(badge_id, submitted_issue)
     assert created_issue.email_subject == submitted_issue.email_subject
-    assert created_issue.badge_id == badge.id
+    assert created_issue.badge_id == badge_id
     assert not created_issue.revoked
     assert created_issue.is_created
     assert created_issue.id == "issueId1234"
@@ -858,7 +792,7 @@ async def test_provider_badge_issue_success(mocked_responses):
         BadgeProviderError,
         match="Cannot issue badge with ID: badgeId1234",
     ):
-        await obf.badges.issue(badge, submitted_issue)
+        await obf.badges.issue(badge_id, submitted_issue)
 
 
 @pytest.mark.anyio
@@ -1017,8 +951,8 @@ async def test_provider_event_read_one(mocked_responses):
         },
         status_code=200,
     )
-    target_issue = BadgeIssue(id="1", recipient=["foo@bar.com"])
-    issue = await anext(obf.events.read(issue=target_issue))
+    target_issue_id = "1"
+    issue = await anext(obf.events.read(issue_id=target_issue_id))
     assert issue == BadgeIssue(
         id="1",
         badge_id="1234",
@@ -1029,13 +963,6 @@ async def test_provider_event_read_one(mocked_responses):
         log_entry={"issuer": "luc"},
         is_created=True,
     )
-
-    target_issue = BadgeIssue(recipient=["foo@bar.com"])
-    with pytest.raises(
-        BadgeProviderError,
-        match="the ID field is required",
-    ):
-        await anext(obf.events.read(issue=target_issue))
 
 
 @pytest.mark.anyio
@@ -1229,9 +1156,9 @@ async def test_provider_assertion_read_all(mocked_responses):
         ],
         status_code=200,
     )
-    assertion = BadgeAssertion(event_id="1")
+    event_id = "1"
     assertions = [
-        assertion async for assertion in obf.assertions.read(assertion=assertion)
+        assertion async for assertion in obf.assertions.read(event_id=event_id)
     ]
     for assertion in assertions:
         assert isinstance(assertion, BadgeAssertion)
@@ -1294,11 +1221,11 @@ async def test_provider_assertion_read_selected(mocked_responses):
         ],
         status_code=200,
     )
-    assertion = BadgeAssertion(event_id="4321")
+    event_id = "4321"
     query = AssertionQuery(email=["foo@bar.com"])
     assertions = [
         assertion
-        async for assertion in obf.assertions.read(assertion=assertion, query=query)
+        async for assertion in obf.assertions.read(event_id=event_id, query=query)
     ]
     assert len(assertions) == 2
 
@@ -1341,24 +1268,16 @@ async def test_provider_assertion_read_with_validationerror(mocked_responses, ca
         status_code=200,
     )
 
-    assertion = BadgeAssertion(event_id="4321")
+    event_id = "4321"
     with caplog.at_level(logging.ERROR):
         with pytest.raises(
             BadgeProviderError,
             match="Cannot yield BadgeAssertion for event_id 4321",
         ):
             _ = [
-                assertion
-                async for assertion in obf.assertions.read(assertion=assertion)
+                assertion async for assertion in obf.assertions.read(event_id=event_id)
             ]
 
     assert ("obc.providers.obf", logging.ERROR) in [
         (class_, level) for (class_, level, _) in caplog.record_tuples
     ]
-
-    assertion.event_id = None
-    with pytest.raises(
-        BadgeProviderError,
-        match="We expect an existing issue",
-    ):
-        await anext(obf.assertions.read(assertion=assertion))

@@ -11,7 +11,7 @@ class BaseAssertion(ABC):
         """Initialize the assertion class."""
 
     @abstractmethod
-    async def read(self, assertion, query=None):
+    async def read(self, event_id, query=None):
         """Read an assertion."""
 
 
@@ -27,7 +27,7 @@ class BaseBadge(ABC):
         """Create a badge."""
 
     @abstractmethod
-    async def read(self, badge=None, query=None):
+    async def read(self, badge_id=None, query=None):
         """Read a badge."""
 
     @abstractmethod
@@ -35,11 +35,11 @@ class BaseBadge(ABC):
         """Update a badge."""
 
     @abstractmethod
-    async def delete(self, badge=None):
+    async def delete(self, badge_id=None):
         """Delete a badge."""
 
     @abstractmethod
-    async def issue(self, badge, issue):
+    async def issue(self, badge_id, issue):
         """Issue a badge."""
 
     @abstractmethod
