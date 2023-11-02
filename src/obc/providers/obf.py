@@ -364,39 +364,32 @@ class OBFAssertion(BaseAssertion):
 
     async def read(
         self,
-        assertion: BadgeAssertion,
+        event_id: str,
         query: AssertionQuery | None = None,
     ) -> Iterable[BadgeAssertion]:
         """Fetch selected or all assertions from an issuing event.
 
         Args:
-            assertion: the assertion to get (using the event_id)
+            event_id: The event id to get associated assertion from
             query: select assertions and yield them
 
         If no `query` argument is provided, it yields all assertions from issue.
         """
-        if assertion.event_id is None:
-            raise BadgeProviderError(
-                "We expect an existing issue (the event_id field is required)"
-            )
-
         # Get a selected assertion or assertion list
         params = None
         if query is not None:
             params = query.params()
         response = await self.api_client.get(
-            f"/event/{self.api_client.client_id}/{assertion.event_id}/assertion",
+            f"/event/{self.api_client.client_id}/{event_id}/assertion",
             params=params,
         )
         logger.info("Successfully listed assertions with query %s", query)
 
         for item in self.api_client.iter_json(response):
             try:
-                yield BadgeAssertion(
-                    **item, event_id=assertion.event_id, is_created=True
-                )
+                yield BadgeAssertion(**item, event_id=event_id, is_created=True)
             except ValidationError as err:
-                msg = f"Cannot yield BadgeAssertion for event_id {assertion.event_id}"
+                msg = f"Cannot yield BadgeAssertion for event_id {event_id}"
                 logger.error("%s. %s", msg, err)
                 raise BadgeProviderError(msg) from err
 
@@ -409,12 +402,12 @@ class OBFEvent:
         self.api_client = api_client
 
     async def read(
-        self, issue: BadgeIssue | None = None, query: IssueQuery | None = None
+        self, issue_id: str | None = None, query: IssueQuery | None = None
     ) -> BadgeIssue:
         """Fetch one, selected or all issuing events.
 
         Args:
-            issue: if provided will only yield selected issue (using the issue id)
+            issue_id: if provided, will only yield issue with this id
             query: select events and yield them
 
         If no `issue` or `query` argument is provided, it yields all issues.
@@ -422,18 +415,18 @@ class OBFEvent:
         # Get a single badge or issue event
         issue_url = f"/event/{self.api_client.client_id}"
         params = None
-        if issue is not None:
-            if issue.id is None:
-                raise BadgeProviderError(
-                    "We expect an existing instance (the ID field is required)"
-                )
-            issue_url += f"/{issue.id}"
+
+        if issue_id:
+            issue_url += f"/{issue_id}"
+
         # Get a selected badge or issue event list
         if query is not None:
             params = query.params()
 
         response = await self.api_client.get(issue_url, params=params)
-        logger.info("Successfully listed events for issue %s params %s", issue, params)
+        logger.info(
+            "Successfully listed events for issue %s params %s", issue_id, params
+        )
 
         for item in self.api_client.iter_json(response):
             try:
@@ -452,7 +445,11 @@ class OBFBadge(BaseBadge):
         self.api_client = api_client
 
     async def create(self, badge: Badge) -> Badge:
-        """Create a badge."""
+        """Create a badge.
+
+        Args:
+            badge (Badge): Badge to create
+        """
         response = await self.api_client.post(
             f"/badge/{self.api_client.client_id}", json=badge.model_dump()
         )
@@ -466,33 +463,29 @@ class OBFBadge(BaseBadge):
         ).groups()[0]
 
         # Get created badge
-        fetched = await anext(self.read(badge=badge))  # type: ignore
+        fetched = await anext(self.read(badge_id=badge.id))  # type: ignore
         fetched.is_created = True
         logger.info("Successfully created badge '%s' with ID: %s", badge.name, badge.id)
 
         return Badge(**fetched.model_dump())
 
     async def read(
-        self, badge: Badge | None = None, query: BadgeQuery | None = None
+        self, badge_id: str | None = None, query: BadgeQuery | None = None
     ) -> Iterable[Badge]:
         """Read one, selected or all badges.
 
         Args:
-            badge: if provided will only yield selected badge (using the badge id)
+            badge_id: if provided, will only yield badge with this id
             query: select badges and yield them
 
         If no `badge` or `query` argument is provided, it yields all badges.
         """
         # Get a single badge
-        if badge is not None:
-            if badge.id is None:
-                raise BadgeProviderError(
-                    "We expect an existing badge instance (the ID field is required)"
-                )
+        if badge_id:
             response = await self.api_client.get(
-                f"/badge/{self.api_client.client_id}/{badge.id}"
+                f"/badge/{self.api_client.client_id}/{badge_id}"
             )
-            logger.info("Successfully got badge with ID: %s", badge.id)
+            logger.info("Successfully got badge with ID: %s", badge_id)
 
         # Get a selected badge list
         elif query is not None:
@@ -518,7 +511,11 @@ class OBFBadge(BaseBadge):
                 raise BadgeProviderError(msg) from err
 
     async def update(self, badge: Badge) -> Badge:
-        """Update a badge."""
+        """Update a badge.
+
+        Args:
+            badge (Badge): Badge to update.
+        """
         if badge.id is None:
             raise BadgeProviderError(
                 "We expect an existing badge instance (the ID field is required)"
@@ -533,10 +530,14 @@ class OBFBadge(BaseBadge):
 
         return badge
 
-    async def delete(self, badge: Badge | None = None) -> None:
-        """Delete a badge."""
+    async def delete(self, badge_id: str | None = None) -> None:
+        """Delete a badge.
+
+        Args:
+            badge_id (str): ID of the badge to delete.
+        """
         # Delete all client badges
-        if badge is None:
+        if badge_id is None:
             logger.critical("Will delete all client badges!")
             response = await self.api_client.delete(
                 f"/badge/{self.api_client.client_id}"
@@ -554,39 +555,27 @@ class OBFBadge(BaseBadge):
             )
             return
 
-        if badge.id is None:
-            raise BadgeProviderError(
-                "We expect an existing badge instance (the ID field is required)"
-            )
-
         # Delete a single badge
-        logger.critical("Will delete badge '%s' with ID: %s", badge.name, badge.id)
+        logger.critical("Will delete badge with ID: %s", badge_id)
         response = await self.api_client.delete(
-            f"/badge/{self.api_client.client_id}/{badge.id}"
+            f"/badge/{self.api_client.client_id}/{badge_id}"
         )
         if not response.status_code == httpx.codes.NO_CONTENT:
-            raise BadgeProviderError(f"Cannot delete badge with ID: {badge.id}")
-        logger.critical("Deleted badge '%s' with ID: %s", badge.name, badge.id)
+            raise BadgeProviderError(f"Cannot delete badge with ID: {badge_id}")
+        logger.critical("Deleted badge with ID: %s", badge_id)
 
-    async def issue(self, badge: Badge, issue: BadgeIssue) -> BadgeIssue:
+    async def issue(self, badge_id: str, issue: BadgeIssue) -> BadgeIssue:
         """Issue a badge.
 
-        Note that you cannot issue a badge with a draft status.
+        Args:
+            badge_id (str): id of the badge to issue
+            issue (BadgeIssue): issuing parameters
         """
-        if badge.id is None:
-            raise BadgeProviderError(
-                "We expect an existing badge instance (the ID field is required)"
-            )
-        if badge.draft:
-            raise BadgeProviderError(
-                f"You cannot issue a badge with a draft status (ID: {badge.id})"
-            )
-
         response = await self.api_client.post(
-            f"/badge/{self.api_client.client_id}/{badge.id}", json=issue.model_dump()
+            f"/badge/{self.api_client.client_id}/{badge_id}", json=issue.model_dump()
         )
         if not response.status_code == httpx.codes.CREATED:
-            raise BadgeProviderError(f"Cannot issue badge with ID: {badge.id}")
+            raise BadgeProviderError(f"Cannot issue badge with ID: {badge_id}")
 
         event_url = response.headers.get("Location")
         issue.id = re.match(
@@ -602,14 +591,18 @@ class OBFBadge(BaseBadge):
         logger.info(
             "Successfully issued %d badges for badge ID: %s",
             len(issue.recipient),
-            badge.id,
+            badge_id,
         )
 
         # Return BadgeIssue with added fields
-        return badge.model_copy(update=fetched.model_dump())
+        return fetched
 
     async def revoke(self, revocation: BadgeRevocation) -> None:
-        """Revoke one or more issued badges."""
+        """Revoke one or more issued badges.
+
+        Args:
+            revocation (BadgeRevocation): Event ID and recipients to revoke badge from
+        """
         logger.warning("Will revoke event: %s", revocation)
         response = await self.api_client.delete(
             f"/event/{self.api_client.client_id}/{revocation.event_id}",
