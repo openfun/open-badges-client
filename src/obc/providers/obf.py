@@ -243,7 +243,7 @@ class BadgeIssue(BaseModel):
     """Open Badge Factory badge issue Model."""
 
     id: Optional[str] = None
-    recipient: list[EmailStr | str]
+    recipient: list[str]
     expires: Optional[int] = None
     issued_on: Optional[int] = None
     email_subject: Optional[str] = None
