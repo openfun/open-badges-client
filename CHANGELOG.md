@@ -8,6 +8,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- OBF: Remove email validation of `BadgeIssue.recipient` field
+
 ## [2.0.0] - 2023-11-02
 
 ### Changed
