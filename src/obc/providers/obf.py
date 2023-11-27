@@ -454,7 +454,9 @@ class OBFBadge(BaseBadge):
             f"/badge/{self.api_client.client_id}", json=badge.model_dump()
         )
         if not response.status_code == httpx.codes.CREATED:
-            raise BadgeProviderError(f"Cannot create badge: {badge}")
+            msg = f"Cannot create badge {badge}, got response {response.status_code}"
+            logger.error(msg)
+            raise BadgeProviderError(msg)
 
         # Get badge ID
         badge_url = response.headers.get("Location")
@@ -525,7 +527,12 @@ class OBFBadge(BaseBadge):
             f"/badge/{self.api_client.client_id}/{badge.id}", json=badge.model_dump()
         )
         if not response.status_code == httpx.codes.NO_CONTENT:
-            raise BadgeProviderError(f"Cannot update badge with ID: {badge.id}")
+            msg = (
+                f"Cannot update badge with ID: {badge.id}, "
+                f"got response {response.status_code}"
+            )
+            logger.error(msg)
+            raise BadgeProviderError(msg)
         logger.info("Successfully updated badge '%s' with ID: %s", badge.name, badge.id)
 
         return badge
@@ -543,12 +550,12 @@ class OBFBadge(BaseBadge):
                 f"/badge/{self.api_client.client_id}"
             )
             if not response.status_code == httpx.codes.NO_CONTENT:
-                raise BadgeProviderError(
-                    (
-                        "Cannot delete badges for client with ID: "
-                        f"{self.api_client.client_id}"
-                    )
+                msg = (
+                    "Cannot delete badges for client with ID: "
+                    f"{self.api_client.client_id}"
                 )
+                logger.error(msg)
+                raise BadgeProviderError(msg)
             logger.info(
                 "All badges have been deleted for the '%s' client",
                 self.api_client.client_id,
@@ -561,7 +568,12 @@ class OBFBadge(BaseBadge):
             f"/badge/{self.api_client.client_id}/{badge_id}"
         )
         if not response.status_code == httpx.codes.NO_CONTENT:
-            raise BadgeProviderError(f"Cannot delete badge with ID: {badge_id}")
+            msg = (
+                f"Cannot delete badge with ID: {badge_id}, "
+                f"got response {response.status_code}"
+            )
+            logger.error(msg)
+            raise BadgeProviderError(msg)
         logger.critical("Deleted badge with ID: %s", badge_id)
 
     async def issue(self, badge_id: str, issue: BadgeIssue) -> BadgeIssue:
@@ -575,7 +587,12 @@ class OBFBadge(BaseBadge):
             f"/badge/{self.api_client.client_id}/{badge_id}", json=issue.model_dump()
         )
         if not response.status_code == httpx.codes.CREATED:
-            raise BadgeProviderError(f"Cannot issue badge with ID: {badge_id}")
+            msg = (
+                f"Cannot issue badge with ID: {badge_id}, "
+                f"got response {response.status_code}"
+            )
+            logger.error(msg)
+            raise BadgeProviderError(msg)
 
         event_url = response.headers.get("Location")
         issue.id = re.match(
@@ -609,7 +626,12 @@ class OBFBadge(BaseBadge):
             params=revocation.params(),
         )
         if not response.status_code == httpx.codes.NO_CONTENT:
-            raise BadgeProviderError(f"Cannot revoke event: {revocation}")
+            msg = (
+                f"Cannot revoke event with ID: {revocation.event_id}, "
+                f"got response {response.status_code}"
+            )
+            logger.error(msg)
+            raise BadgeProviderError(msg)
         logger.info("Revoked event: %s", revocation)
 
 
