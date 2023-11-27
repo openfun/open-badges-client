@@ -837,12 +837,7 @@ async def test_provider_badge_revoke(mocked_responses):
     )
     with pytest.raises(
         BadgeProviderError,
-        match=re.escape(
-            (
-                "Cannot revoke event: event_id='foo_event' "
-                "recipient=['foo@example.org']"
-            )
-        ),
+        match=re.escape(("Cannot revoke event with ID: foo_event, got response 500")),
     ):
         await obf.badges.revoke(
             BadgeRevocation(

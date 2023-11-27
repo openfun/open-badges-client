@@ -8,6 +8,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- OBF: Add and improve logs when wrong status code received
+
 ### Changed
 
 - OBF: Remove email validation of `BadgeIssue.recipient` field
