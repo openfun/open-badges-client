@@ -8,6 +8,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0] - 2023-11-28
+
 ### Added
 
 - OBF: Add and improve logs when wrong status code received
@@ -58,7 +60,8 @@ IDs as input parameters when sufficient instead of whole objects [BC]
 
 - Extract the OBF badge provider from the Joanie project
 
-[Unreleased]: https://github.com/openfun/open-badges-client/compare/v2.0.0...main
+[Unreleased]: https://github.com/openfun/open-badges-client/compare/v2.1.0...main
+[2.1.0]: https://github.com/openfun/open-badges-client/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/openfun/open-badges-client/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/openfun/open-badges-client/compare/v0.2.1...v1.0.0
 [0.2.1]: https://github.com/openfun/open-badges-client/compare/v0.2.0...v0.2.1
